@@ -1,6 +1,6 @@
 'use client';
 import React, { useMemo, useState } from 'react';
-import { FileText, Code, BookOpen, Database, Download, Search, File, Filter } from 'lucide-react';
+import { FileText, Code, BookOpen, Database, Download, Search, File, Filter, Archive } from 'lucide-react';
 import { SectionHeader, Container, Badge } from '@/components/site/section';
 import { downloads, type DownloadItem, type DomainKey } from '@/lib/data';
 import { Card } from '@/components/ui/card';
@@ -8,11 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
+
+
 const typeIcon: Record<DownloadItem['type'], React.ElementType> = {
   PDF: FileText,
   Source: Code,
   Docs: BookOpen,
   Dataset: Database,
+  ZIP: Archive,
 };
 
 const filters: { key: DomainKey | 'all'; label: string }[] = [
@@ -76,7 +79,7 @@ export default function DownloadsPage() {
                 </button>
               ))}
               <span className="text-muted-foreground/40 mx-1">|</span>
-              {(['all', 'PDF', 'Source', 'Docs', 'Dataset'] as const).map((t) => (
+              {(['all', 'PDF', 'Source', 'Docs', 'Dataset', 'ZIP'] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setTypeFilter(t)}
@@ -128,10 +131,21 @@ export default function DownloadsPage() {
                         <h3 className="font-semibold text-white">{d.title}</h3>
                         <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{d.description}</p>
                         <div className="mt-4 flex items-center justify-between">
-                          <span className="text-[10px] font-mono text-muted-foreground/60">Updated {d.updated}</span>
-                          <Button size="sm" className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white btn-glow gap-1.5">
-                            <Download className="h-3.5 w-3.5" /> Download
+                          <span className="text-[10px] font-mono text-muted-foreground/60">
+                            Updated {d.updated}
+                          </span>
+
+                          <Button
+                            asChild
+                            size="sm"
+                            className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white btn-glow gap-1.5"
+                          >
+                            <a href={d.url || "#"} download>
+                              <Download className="h-3.5 w-3.5" />
+                              Download
+                            </a>
                           </Button>
+
                         </div>
                       </div>
                     </div>
