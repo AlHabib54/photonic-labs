@@ -30,25 +30,20 @@ type Message = {
 
 export default function AdminPage() {
   const [session, setSession] = useState<Session | null>(null);
-
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
   const [messages, setMessages] = useState<Message[]>([]);
   const [query, setQuery] = useState('');
-
   const [loading, setLoading] = useState(true);
   const [loginLoading, setLoginLoading] = useState(false);
   const [error, setError] = useState('');
 
-  /* =========================================================
-     LOAD MESSAGES
-  ========================================================= */
-
   const loadMessages = async (): Promise<boolean> => {
-    if (!supabase) {
-      setError('Supabase is not configured.');
+    const client = supabase;
+
+    if (!client) {
       setMessages([]);
+      setError('Supabase is not configured.');
       setLoading(false);
       return false;
     }
@@ -57,108 +52,79 @@ export default function AdminPage() {
     setError('');
 
     try {
-      const { data, error: fetchError } = await supabase
+      const { data, error: fetchError } = await client
         .from('contact_messages')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(100);
 
-      console.log('Admin messages:', data);
-      console.log('Admin message error:', fetchError);
-
       if (fetchError) {
-        console.error(
-          'Admin message loading error:',
-          fetchError,
-        );
-
+        console.error('Admin message loading error:', fetchError);
         setMessages([]);
         setError(fetchError.message);
-        setLoading(false);
-
         return false;
       }
 
       setMessages((data as Message[]) ?? []);
-      setLoading(false);
-
       return true;
     } catch (err) {
-      console.error(
-        'Unexpected admin message error:',
-        err,
-      );
-
+      console.error('Unexpected admin message error:', err);
       setMessages([]);
       setError(
         err instanceof Error
           ? err.message
           : 'Unable to load messages.',
       );
-      setLoading(false);
-
       return false;
+    } finally {
+      setLoading(false);
     }
   };
-
-  /* =========================================================
-     VERIFY ADMIN
-  ========================================================= */
 
   const verifyAdmin = async (
     currentSession: Session | null,
   ): Promise<boolean> => {
-    if (!supabase || !currentSession?.user?.email) {
+    const client = supabase;
+
+    if (!client || !currentSession?.user?.email) {
       return false;
     }
 
-    const userEmail =
-      currentSession.user.email.trim().toLowerCase();
+    const userEmail = currentSession.user.email.trim();
 
     try {
-      const { data: admin, error: adminError } =
-        await supabase
-          .from('admin_users')
-          .select('email')
-          .ilike('email', userEmail)
-          .maybeSingle();
+      const { data: admin, error: adminError } = await client
+        .from('admin_users')
+        .select('email')
+        .ilike('email', userEmail)
+        .maybeSingle();
 
       if (adminError) {
-        console.error(
-          'Admin verification error:',
-          adminError,
-        );
-
+        console.error('Admin verification error:', adminError);
         setError(
           `Admin verification failed: ${adminError.message}`,
         );
-
         return false;
       }
 
-      return !!admin;
+      return Boolean(admin);
     } catch (err) {
-      console.error(
-        'Unexpected admin verification error:',
-        err,
-      );
-
+      console.error('Unexpected admin verification error:', err);
       setError(
         err instanceof Error
           ? `Admin verification failed: ${err.message}`
           : 'Admin verification failed.',
       );
-
       return false;
     }
   };
 
-  /* =========================================================
-     INITIAL SESSION
-  ========================================================= */
-
   useEffect(() => {
-    if (!supabase) {
+    const client = supabase;
+
+    if (!client) {
+      setSession(null);
+      setMessages([]);
       setError('Supabase is not configured.');
       setLoading(false);
       return;
@@ -174,21 +140,16 @@ export default function AdminPage() {
         const {
           data: { session: currentSession },
           error: sessionError,
-        } = await supabase.auth.getSession();
+        } = await client.auth.getSession();
 
         if (!mounted) return;
 
         if (sessionError) {
-          console.error(
-            'Session initialization error:',
-            sessionError,
-          );
-
+          console.error('Session initialization error:', sessionError);
           setSession(null);
           setMessages([]);
           setError(sessionError.message);
           setLoading(false);
-
           return;
         }
 
@@ -196,17 +157,15 @@ export default function AdminPage() {
           setSession(null);
           setMessages([]);
           setLoading(false);
-
           return;
         }
 
-        const isAdmin =
-          await verifyAdmin(currentSession);
+        const isAdmin = await verifyAdmin(currentSession);
 
         if (!mounted) return;
 
         if (!isAdmin) {
-          await supabase.auth.signOut();
+          await client.auth.signOut();
 
           if (!mounted) return;
 
@@ -214,30 +173,20 @@ export default function AdminPage() {
           setMessages([]);
           setError('Access denied.');
           setLoading(false);
-
           return;
         }
 
-        /*
-         * The user is authenticated and authorized.
-         * Show the dashboard first, then load the messages.
-         */
         setSession(currentSession);
         setLoading(false);
-
         await loadMessages();
       } catch (err) {
-        console.error(
-          'Admin initialization error:',
-          err,
-        );
+        console.error('Admin initialization error:', err);
 
         if (!mounted) return;
 
         setSession(null);
         setMessages([]);
         setLoading(false);
-
         setError(
           err instanceof Error
             ? err.message
@@ -246,41 +195,25 @@ export default function AdminPage() {
       }
     };
 
-    initialize();
+    void initialize();
 
-    /*
-     * IMPORTANT:
-     * Keep this callback synchronous.
-     *
-     * Do not call Supabase async methods from inside
-     * onAuthStateChange.
-     */
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      (_event, currentSession) => {
-        if (!mounted) return;
+    } = client.auth.onAuthStateChange((_event, currentSession) => {
+      if (!mounted) return;
 
-        if (!currentSession) {
-          setSession(null);
-          setMessages([]);
-          setQuery('');
-          setError('');
-          setLoading(false);
-          setLoginLoading(false);
+      if (!currentSession) {
+        setSession(null);
+        setMessages([]);
+        setQuery('');
+        setError('');
+        setLoading(false);
+        setLoginLoading(false);
+        return;
+      }
 
-          return;
-        }
-
-        /*
-         * We only synchronize the local React session here.
-         *
-         * Authorization is handled by initialize() and
-         * handleLogin(), outside this callback.
-         */
-        setSession(currentSession);
-      },
-    );
+      setSession(currentSession);
+    });
 
     return () => {
       mounted = false;
@@ -288,16 +221,12 @@ export default function AdminPage() {
     };
   }, []);
 
-  /* =========================================================
-     LOGIN
-  ========================================================= */
-
-  const handleLogin = async (
-    event: React.FormEvent,
-  ) => {
+  const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!supabase) {
+    const client = supabase;
+
+    if (!client) {
       setError('Supabase is not configured.');
       return;
     }
@@ -306,154 +235,82 @@ export default function AdminPage() {
     setError('');
 
     try {
-      const {
-        data,
-        error: loginError,
-      } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+      const { data, error: loginError } =
+        await client.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
 
       if (loginError) {
-        console.error(
-          'Admin login error:',
-          loginError,
-        );
-
+        console.error('Admin login error:', loginError);
         setError(loginError.message);
-        setLoginLoading(false);
-
         return;
       }
 
       if (!data.session) {
-        setError(
-          'Login succeeded but no session was returned.',
-        );
-
-        setLoginLoading(false);
-
+        setError('Login succeeded but no session was returned.');
         return;
       }
-
-      /*
-       * IMPORTANT:
-       * Do NOT call setSession(), auth.setSession(),
-       * loadMessages(), or other async Supabase methods
-       * from onAuthStateChange.
-       *
-       * We are already outside that callback here, so it
-       * is safe to verify authorization and load data.
-       */
 
       const isAdmin = await verifyAdmin(data.session);
 
       if (!isAdmin) {
-        await supabase.auth.signOut();
-
+        await client.auth.signOut();
         setSession(null);
         setMessages([]);
-
         setError(
           'Access denied. This account is not authorized for the admin dashboard.',
         );
-
-        setLoginLoading(false);
-
         return;
       }
 
-      /*
-       * Show the dashboard immediately after authorization.
-       */
       setSession(data.session);
-
       setEmail('');
       setPassword('');
       setError('');
 
-      setLoginLoading(false);
-
-      /*
-       * Load messages separately.
-       * Any failure will now appear inside the dashboard
-       * instead of leaving the login button stuck on
-       * "Signing in...".
-       */
       await loadMessages();
     } catch (err) {
-      console.error(
-        'Unexpected admin login error:',
-        err,
-      );
-
+      console.error('Unexpected admin login error:', err);
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to sign in.',
+        err instanceof Error ? err.message : 'Unable to sign in.',
       );
-
+    } finally {
       setLoginLoading(false);
     }
   };
 
-  /* =========================================================
-     LOGOUT
-  ========================================================= */
-
   const handleLogout = async () => {
-    if (!supabase) return;
+    const client = supabase;
 
     try {
-      await supabase.auth.signOut();
+      if (client) {
+        await client.auth.signOut();
+      }
     } catch (err) {
-      console.error(
-        'Admin logout error:',
-        err,
-      );
+      console.error('Admin logout error:', err);
+    } finally {
+      setSession(null);
+      setMessages([]);
+      setQuery('');
+      setError('');
+      setLoading(false);
+      setLoginLoading(false);
     }
-
-    setSession(null);
-    setMessages([]);
-    setQuery('');
-    setError('');
-    setLoading(false);
-    setLoginLoading(false);
   };
 
-  /* =========================================================
-     SEARCH
-  ========================================================= */
+  const filteredMessages = messages.filter((message) => {
+    const search = query.trim().toLowerCase();
 
-  const filteredMessages = messages.filter(
-    (message) => {
-      const search =
-        query.trim().toLowerCase();
+    if (!search) return true;
 
-      if (!search) {
-        return true;
-      }
-
-      return (
-        message.name
-          .toLowerCase()
-          .includes(search) ||
-        message.email
-          .toLowerCase()
-          .includes(search) ||
-        message.subject
-          .toLowerCase()
-          .includes(search) ||
-        message.message
-          .toLowerCase()
-          .includes(search)
-      );
-    },
-  );
-
-  /* =========================================================
-     LOGIN SCREEN
-  ========================================================= */
+    return [
+      message.name,
+      message.email,
+      message.subject,
+      message.message,
+    ].some((value) => value.toLowerCase().includes(search));
+  });
 
   if (!session) {
     return (
@@ -485,10 +342,7 @@ export default function AdminPage() {
                   </p>
                 </div>
 
-                <form
-                  onSubmit={handleLogin}
-                  className="space-y-4"
-                >
+                <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
                     <label
                       htmlFor="admin-email"
@@ -503,11 +357,7 @@ export default function AdminPage() {
                       required
                       autoComplete="email"
                       value={email}
-                      onChange={(event) =>
-                        setEmail(
-                          event.target.value,
-                        )
-                      }
+                      onChange={(event) => setEmail(event.target.value)}
                       className="glass border-white/10 bg-transparent"
                       placeholder="admin@example.com"
                     />
@@ -527,11 +377,7 @@ export default function AdminPage() {
                       required
                       autoComplete="current-password"
                       value={password}
-                      onChange={(event) =>
-                        setPassword(
-                          event.target.value,
-                        )
-                      }
+                      onChange={(event) => setPassword(event.target.value)}
                       className="glass border-white/10 bg-transparent"
                       placeholder="••••••••"
                     />
@@ -554,9 +400,7 @@ export default function AdminPage() {
                       <Lock className="h-4 w-4" />
                     )}
 
-                    {loginLoading
-                      ? 'Signing in...'
-                      : 'Sign in'}
+                    {loginLoading ? 'Signing in...' : 'Sign in'}
                   </Button>
                 </form>
               </Card>
@@ -566,10 +410,6 @@ export default function AdminPage() {
       </div>
     );
   }
-
-  /* =========================================================
-     ADMIN INBOX
-  ========================================================= */
 
   return (
     <div className="pt-24">
@@ -607,16 +447,12 @@ export default function AdminPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={loadMessages}
+                onClick={() => void loadMessages()}
                 disabled={loading}
                 className="glass border-white/10"
               >
                 <RefreshCw
-                  className={`mr-2 h-4 w-4 ${
-                    loading
-                      ? 'animate-spin'
-                      : ''
-                  }`}
+                  className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`}
                 />
                 Refresh
               </Button>
@@ -624,7 +460,7 @@ export default function AdminPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={handleLogout}
+                onClick={() => void handleLogout()}
                 className="glass border-white/10"
               >
                 <LogOut className="mr-2 h-4 w-4" />
@@ -642,9 +478,7 @@ export default function AdminPage() {
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-cyan-300" />
 
-                <span className="font-semibold text-white">
-                  Messages
-                </span>
+                <span className="font-semibold text-white">Messages</span>
 
                 <Badge className="border-white/10 text-muted-foreground">
                   {messages.length}
@@ -656,11 +490,7 @@ export default function AdminPage() {
 
                 <Input
                   value={query}
-                  onChange={(event) =>
-                    setQuery(
-                      event.target.value,
-                    )
-                  }
+                  onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search messages..."
                   className="glass border-white/10 bg-transparent pl-9"
                 />
@@ -685,44 +515,38 @@ export default function AdminPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredMessages.map(
-                  (message) => (
-                    <div
-                      key={message.id}
-                      className="rounded-xl border border-white/5 bg-white/[0.02] p-5 transition-colors hover:border-cyan-400/20"
-                    >
-                      <div className="flex flex-col gap-4">
-                        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-semibold text-white">
-                              {message.name}
-                            </span>
-
-                            <span className="text-xs font-mono text-muted-foreground">
-                              {message.email}
-                            </span>
-
-                            <Badge>
-                              {message.subject}
-                            </Badge>
-                          </div>
-
-                          <span className="text-xs font-mono text-muted-foreground">
-                            {new Date(
-                              message.created_at,
-                            ).toLocaleString()}
+                {filteredMessages.map((message) => (
+                  <div
+                    key={message.id}
+                    className="rounded-xl border border-white/5 bg-white/[0.02] p-5 transition-colors hover:border-cyan-400/20"
+                  >
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-white">
+                            {message.name}
                           </span>
+
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {message.email}
+                          </span>
+
+                          <Badge>{message.subject}</Badge>
                         </div>
 
-                        <div className="rounded-lg border border-white/5 bg-black/10 p-4">
-                          <p className="whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
-                            {message.message}
-                          </p>
-                        </div>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {new Date(message.created_at).toLocaleString()}
+                        </span>
+                      </div>
+
+                      <div className="rounded-lg border border-white/5 bg-black/10 p-4">
+                        <p className="whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
+                          {message.message}
+                        </p>
                       </div>
                     </div>
-                  ),
-                )}
+                  </div>
+                ))}
               </div>
             )}
           </Card>
